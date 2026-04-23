@@ -15,9 +15,11 @@ app.use(bot.webhookCallback(WEBHOOK_PATH));
 app.listen(port, async () => {
   console.log(`Backend listening on http://localhost:${port}`);
   const frontendUrl = process.env.FRONTEND_URL;
-  if (frontendUrl) {
+  if (frontendUrl?.startsWith("https://")) {
     const webhookUrl = `${frontendUrl}${WEBHOOK_PATH}`;
     await bot.telegram.setWebhook(webhookUrl);
     console.log("Webhook set to:", webhookUrl);
+  } else {
+    console.log("FRONTEND_URL is not HTTPS — skipping webhook registration (local dev mode).");
   }
 });
