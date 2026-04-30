@@ -5,7 +5,7 @@ import type {
   Location,
   UserProfile,
 } from "../domain/types.js";
-import type { DbService } from "./db.js";
+import type { DbService, LocationQuery } from "./db.js";
 
 type UserRow = {
   id: number;
@@ -32,6 +32,36 @@ type LocationRow = {
 };
 
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
+
+type ErrorWithDetails = {
+  message?: unknown;
+  code?: unknown;
+  details?: unknown;
+  hint?: unknown;
+};
+
+function toErrorPayload(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const details = error as ErrorWithDetails;
+    return {
+      message: typeof details.message === "string" ? details.message : "Unknown error",
+      code: typeof details.code === "string" ? details.code : undefined,
+      details: typeof details.details === "string" ? details.details : undefined,
+      hint: typeof details.hint === "string" ? details.hint : undefined,
+    };
+  }
+
+  return {
+    message: "Unknown error",
+  };
+}
 
 function mapUser(row: UserRow): UserProfile {
   return {
@@ -110,16 +140,39 @@ export class SupabaseDbService implements DbService {
     return mapUser(data);
   }
 
-  async listApprovedLocations(): Promise<Location[]> {
-    const { data, error } = await supabase
+  async listApprovedLocations(query?: LocationQuery): Promise<Location[]> {
+    let request = supabase
       .from("places")
       .select(
         "id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at"
       )
-      .eq("is_approved", true)
-      .order("created_at", { ascending: false });
+      .eq("is_approved", true);
+
+    if (query?.bbox) {
+      request = request
+        .gte("lat", query.bbox.minLat)
+        .lte("lat", query.bbox.maxLat)
+        .gte("lon", query.bbox.minLon)
+        .lte("lon", query.bbox.maxLon);
+    }
+
+    if (query?.search) {
+      const escaped = query.search.replace(/[%_]/g, "\\$&");
+      request = request.or(
+        `name.ilike.%${escaped}%,description.ilike.%${escaped}%,category.ilike.%${escaped}%`
+      );
+    }
+
+    request = request.order("created_at", { ascending: false });
+
+    if (query?.limit && Number.isFinite(query.limit) && query.limit > 0) {
+      request = request.limit(Math.min(query.limit, 200));
+    }
+
+    const { data, error } = await request;
 
     if (error) {
+      console.error("[db:listApprovedLocations] Supabase query failed", toErrorPayload(error));
       throw error;
     }
 
