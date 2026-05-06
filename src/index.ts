@@ -1,25 +1,8 @@
 import "dotenv/config";
-import { createApp } from "./app.js";
-import { initBot } from "./bot.js";
-import { SupabaseDbService } from "./services/supabaseDb.js";
+import { app } from "./server.js";
 
 const port = Number(process.env.PORT || 3000);
-const WEBHOOK_PATH = "/tg/webhook";
 
-const db = new SupabaseDbService();
-const app = createApp(db);
-
-const bot = initBot();
-app.use(bot.webhookCallback(WEBHOOK_PATH));
-
-app.listen(port, async () => {
+app.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);
-  const frontendUrl = process.env.FRONTEND_URL;
-  if (frontendUrl?.startsWith("https://")) {
-    const webhookUrl = `${frontendUrl}${WEBHOOK_PATH}`;
-    await bot.telegram.setWebhook(webhookUrl);
-    console.log("Webhook set to:", webhookUrl);
-  } else {
-    console.log("FRONTEND_URL is not HTTPS — skipping webhook registration (local dev mode).");
-  }
 });
