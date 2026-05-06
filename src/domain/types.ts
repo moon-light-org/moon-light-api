@@ -28,7 +28,7 @@ export type Location = {
 
 export type CreateUserInput = {
   telegramId: string;
-  nickname: string;
+  nickname: string | null;
   avatarUrl: string | null;
 };
 

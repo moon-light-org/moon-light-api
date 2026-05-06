@@ -5,6 +5,9 @@ import {
   type LocationCategory,
 } from "./types.js";
 
+export type CreateUserBodyInput = Omit<CreateUserInput, "telegramId">;
+export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
+
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -40,14 +43,6 @@ function ensureCategory(value: unknown): LocationCategory {
   return category as LocationCategory;
 }
 
-function ensureTelegramId(value: unknown): string {
-  const telegramId = asTrimmedString(value);
-  if (!telegramId.length) {
-    throw new Error("telegramId is required");
-  }
-  return telegramId;
-}
-
 function ensureLocationName(value: unknown): string {
   const name = asTrimmedString(value);
   if (!name.length) {
@@ -59,20 +54,19 @@ function ensureLocationName(value: unknown): string {
   return name;
 }
 
-export function parseCreateUserInput(raw: unknown): CreateUserInput {
+export function parseCreateUserInput(raw: unknown): CreateUserBodyInput {
   if (!raw || typeof raw !== "object") {
     throw new Error("Request body must be an object");
   }
 
   const source = raw as Record<string, unknown>;
-  const telegramId = ensureTelegramId(source.telegramId);
-  const nickname = optionalTrimmedString(source.nickname) ?? `user_${telegramId}`;
+  const nickname = optionalTrimmedString(source.nickname);
   const avatarUrl = optionalTrimmedString(source.avatarUrl);
 
-  return { telegramId, nickname, avatarUrl };
+  return { nickname, avatarUrl };
 }
 
-export function parseCreateLocationInput(raw: unknown): CreateLocationInput {
+export function parseCreateLocationInput(raw: unknown): CreateLocationBodyInput {
   if (!raw || typeof raw !== "object") {
     throw new Error("Request body must be an object");
   }
@@ -80,7 +74,6 @@ export function parseCreateLocationInput(raw: unknown): CreateLocationInput {
   const source = raw as Record<string, unknown>;
 
   return {
-    telegramId: ensureTelegramId(source.telegramId),
     name: ensureLocationName(source.name),
     description: optionalTrimmedString(source.description),
     latitude: ensureLatitude(source.latitude),

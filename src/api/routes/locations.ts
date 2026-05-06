@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { parseCreateLocationInput } from "../../domain/validation.js";
 import type { DbService, LocationQuery } from "../../services/db.js";
+import {
+  requireTelegramAuth,
+  type TelegramAuthRequest,
+} from "../../middleware/telegramAuth.js";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
@@ -76,10 +80,14 @@ export function createLocationsRouter(db: DbService) {
     }
   });
 
-  router.post("/", async (req, res) => {
+  router.post("/", requireTelegramAuth, async (req, res) => {
     try {
+      const telegramReq = req as TelegramAuthRequest;
       const input = parseCreateLocationInput(req.body);
-      const created = await db.createLocation(input);
+      const created = await db.createLocation({
+        telegramId: telegramReq.telegram!.user.id,
+        ...input,
+      });
       res.status(201).json(created);
     } catch (error) {
       logRouteError("POST /", error);

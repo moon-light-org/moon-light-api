@@ -120,7 +120,7 @@ export class SupabaseDbService implements DbService {
       .insert([
         {
           telegram_id: input.telegramId,
-          nickname: input.nickname,
+          nickname: input.nickname ?? `user_${input.telegramId}`,
           avatar_url: input.avatarUrl,
         },
       ])
