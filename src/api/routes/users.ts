@@ -23,7 +23,11 @@ export function createUsersRouter(db: DbService) {
       res.status(200).json(user);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create user";
-      const status = /required|object/.test(message) ? 400 : 500;
+      const status = /required|object/.test(message)
+        ? 400
+        : /already taken/i.test(message)
+        ? 409
+        : 500;
       res.status(status).json({ error: message });
     }
   });

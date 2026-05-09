@@ -108,11 +108,61 @@ async function findUserByTelegramId(telegramId: string): Promise<UserProfile | n
   return mapUser(data);
 }
 
+function normalizeNickname(nickname: string | null): string | null {
+  if (!nickname) {
+    return null;
+  }
+  const trimmed = nickname.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function isUniqueNicknameViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const withCode = error as { code?: unknown; message?: unknown };
+  if (withCode.code !== "23505") {
+    return false;
+  }
+  const message = typeof withCode.message === "string" ? withCode.message.toLowerCase() : "";
+  return message.includes("nickname");
+}
+
 export class SupabaseDbService implements DbService {
   async getOrCreateUser(input: CreateUserInput): Promise<UserProfile> {
+    const normalizedNickname = normalizeNickname(input.nickname);
     const existing = await findUserByTelegramId(input.telegramId);
     if (existing) {
-      return existing;
+      const shouldUpdateNickname =
+        normalizedNickname !== null && normalizedNickname !== existing.nickname;
+      const shouldUpdateAvatar = input.avatarUrl !== undefined && input.avatarUrl !== existing.avatar_url;
+      if (!shouldUpdateNickname && !shouldUpdateAvatar) {
+        return existing;
+      }
+
+      const payload: { nickname?: string; avatar_url?: string | null } = {};
+      if (shouldUpdateNickname) {
+        payload.nickname = normalizedNickname;
+      }
+      if (shouldUpdateAvatar) {
+        payload.avatar_url = input.avatarUrl;
+      }
+
+      const { data: updated, error: updateError } = await supabase
+        .from("users")
+        .update(payload)
+        .eq("telegram_id", input.telegramId)
+        .select("id, telegram_id, nickname, avatar_url, role, created_at")
+        .single<UserRow>();
+
+      if (updateError) {
+        if (isUniqueNicknameViolation(updateError)) {
+          throw new Error("Nickname is already taken");
+        }
+        throw updateError;
+      }
+
+      return mapUser(updated);
     }
 
     const { data, error } = await supabase
@@ -120,7 +170,7 @@ export class SupabaseDbService implements DbService {
       .insert([
         {
           telegram_id: input.telegramId,
-          nickname: input.nickname ?? `user_${input.telegramId}`,
+          nickname: normalizedNickname ?? "",
           avatar_url: input.avatarUrl,
         },
       ])
@@ -128,6 +178,9 @@ export class SupabaseDbService implements DbService {
       .single<UserRow>();
 
     if (error) {
+      if (isUniqueNicknameViolation(error)) {
+        throw new Error("Nickname is already taken");
+      }
       if (error.code === "23505") {
         const fetched = await findUserByTelegramId(input.telegramId);
         if (fetched) {
@@ -182,7 +235,7 @@ export class SupabaseDbService implements DbService {
   async createLocation(input: CreateLocationInput): Promise<Location> {
     const user = await this.getOrCreateUser({
       telegramId: input.telegramId,
-      nickname: `user_${input.telegramId}`,
+      nickname: null,
       avatarUrl: null,
     });
 

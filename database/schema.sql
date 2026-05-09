@@ -11,6 +11,10 @@ create table if not exists public.users (
   created_at timestamptz not null default now()
 );
 
+create unique index if not exists idx_users_nickname_unique_ci
+  on public.users (lower(nickname))
+  where length(trim(nickname)) > 0;
+
 -- 2) Extend existing places table for app-owned submissions / moderation
 alter table if exists public.places
   add column if not exists created_by_user_id bigint,
