@@ -43,3 +43,36 @@ export type CreateLocationInput = {
   imageUrl: string | null;
   schedules: string | null;
 };
+
+export type LocationPhoto = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  image_url: string;
+  caption: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+};
+
+export type LocationReview = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  rating: number;
+  text: string | null;
+  created_at: string;
+};
+
+export type CreateLocationPhotoInput = {
+  telegramId: string;
+  locationId: number;
+  dataUrl: string;
+};
+
+export type CreateLocationReviewInput = {
+  telegramId: string;
+  locationId: number;
+  rating: number;
+  text: string | null;
+};

@@ -7,6 +7,8 @@ import {
 
 export type CreateUserBodyInput = Omit<CreateUserInput, "telegramId">;
 export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
+export type CreateLocationPhotoBodyInput = { dataUrl: string };
+export type CreateLocationReviewBodyInput = { rating: number; text: string | null };
 
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -83,6 +85,37 @@ export function parseCreateLocationInput(raw: unknown): CreateLocationBodyInput 
     imageUrl: optionalTrimmedString(source.imageUrl),
     schedules: optionalTrimmedString(source.schedules),
   };
+}
+
+export function parseCreateLocationPhotoInput(raw: unknown): CreateLocationPhotoBodyInput {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Request body must be an object");
+  }
+  const source = raw as Record<string, unknown>;
+  const dataUrl = asTrimmedString(source.dataUrl);
+  if (!dataUrl) {
+    throw new Error("dataUrl is required");
+  }
+  if (!dataUrl.startsWith("data:image/")) {
+    throw new Error("Only image data URLs are supported");
+  }
+  return { dataUrl };
+}
+
+export function parseCreateLocationReviewInput(raw: unknown): CreateLocationReviewBodyInput {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Request body must be an object");
+  }
+  const source = raw as Record<string, unknown>;
+  const rating = Number(source.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new Error("rating must be an integer from 1 to 5");
+  }
+  const text = optionalTrimmedString(source.text);
+  if (text && text.length > 600) {
+    throw new Error("text must not exceed 600 characters");
+  }
+  return { rating, text };
 }
 
 export { allowedLocationCategories };

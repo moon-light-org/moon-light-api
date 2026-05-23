@@ -1,8 +1,12 @@
 import { supabase } from "../lib/supabase.js";
 import type {
   CreateLocationInput,
+  CreateLocationPhotoInput,
+  CreateLocationReviewInput,
   CreateUserInput,
   Location,
+  LocationPhoto,
+  LocationReview,
   UserProfile,
 } from "../domain/types.js";
 import type { DbService, LocationQuery } from "./db.js";
@@ -31,7 +35,29 @@ type LocationRow = {
   created_at: string;
 };
 
+type LocationPhotoRow = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  image_url: string;
+  caption: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+};
+
+type LocationReviewRow = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  rating: number;
+  text: string | null;
+  created_at: string;
+};
+
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
+const LOCATION_PHOTO_BUCKET = process.env.LOCATION_PHOTO_BUCKET ?? "location-photos";
+const MAX_UPLOAD_BYTES = 1024 * 1024;
 
 type ErrorWithDetails = {
   message?: unknown;
@@ -89,6 +115,51 @@ function mapLocation(row: LocationRow): Location {
     is_approved: row.is_approved,
     created_at: row.created_at,
   };
+}
+
+function mapLocationPhoto(row: LocationPhotoRow): LocationPhoto {
+  return {
+    id: row.id,
+    location_id: row.location_id,
+    user_id: row.user_id,
+    image_url: row.image_url,
+    caption: row.caption,
+    mime_type: row.mime_type,
+    size_bytes: row.size_bytes,
+    created_at: row.created_at,
+  };
+}
+
+function mapLocationReview(row: LocationReviewRow): LocationReview {
+  return {
+    id: row.id,
+    location_id: row.location_id,
+    user_id: row.user_id,
+    rating: row.rating,
+    text: row.text,
+    created_at: row.created_at,
+  };
+}
+
+function parseImageDataUrl(dataUrl: string): { bytes: Buffer; mimeType: string; extension: string } {
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([a-zA-Z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) {
+    throw new Error("Unsupported image format. Use png, jpg, jpeg, webp, or gif.");
+  }
+  const rawMimeType = match[1];
+  const base64 = match[2];
+  if (!rawMimeType || !base64) {
+    throw new Error("Invalid image data URL");
+  }
+  const mimeType = rawMimeType === "image/jpg" ? "image/jpeg" : rawMimeType;
+  const bytes = Buffer.from(base64, "base64");
+  if (bytes.length > MAX_UPLOAD_BYTES) {
+    throw new Error("Image must be 1MB or smaller.");
+  }
+  const parts = mimeType.split("/");
+  const guessedExtension = parts[1];
+  const extension = mimeType === "image/jpeg" ? "jpg" : guessedExtension ?? "png";
+  return { bytes, mimeType, extension };
 }
 
 async function findUserByTelegramId(telegramId: string): Promise<UserProfile | null> {
@@ -268,5 +339,90 @@ export class SupabaseDbService implements DbService {
     }
 
     return mapLocation(data);
+  }
+
+  async listLocationPhotos(locationId: number): Promise<LocationPhoto[]> {
+    const { data, error } = await supabase
+      .from("location_photos")
+      .select("id, location_id, user_id, image_url, caption, mime_type, size_bytes, created_at")
+      .eq("location_id", locationId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map((row) => mapLocationPhoto(row as LocationPhotoRow));
+  }
+
+  async addLocationPhoto(input: CreateLocationPhotoInput): Promise<LocationPhoto> {
+    const user = await this.getOrCreateUser({
+      telegramId: input.telegramId,
+      nickname: null,
+      avatarUrl: null,
+    });
+    const parsed = parseImageDataUrl(input.dataUrl);
+    const path = `${input.locationId}/${Date.now()}-${user.id}.${parsed.extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from(LOCATION_PHOTO_BUCKET)
+      .upload(path, parsed.bytes, {
+        contentType: parsed.mimeType,
+        upsert: false,
+      });
+    if (uploadError) {
+      throw uploadError;
+    }
+    const { data: publicUrlData } = supabase.storage.from(LOCATION_PHOTO_BUCKET).getPublicUrl(path);
+    const { data, error } = await supabase
+      .from("location_photos")
+      .insert([
+        {
+          location_id: input.locationId,
+          user_id: user.id,
+          image_url: publicUrlData.publicUrl,
+          mime_type: parsed.mimeType,
+          size_bytes: parsed.bytes.length,
+        },
+      ])
+      .select("id, location_id, user_id, image_url, caption, mime_type, size_bytes, created_at")
+      .single<LocationPhotoRow>();
+    if (error) {
+      throw error;
+    }
+    return mapLocationPhoto(data);
+  }
+
+  async listLocationReviews(locationId: number): Promise<LocationReview[]> {
+    const { data, error } = await supabase
+      .from("location_reviews")
+      .select("id, location_id, user_id, rating, text, created_at")
+      .eq("location_id", locationId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map((row) => mapLocationReview(row as LocationReviewRow));
+  }
+
+  async addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview> {
+    const user = await this.getOrCreateUser({
+      telegramId: input.telegramId,
+      nickname: null,
+      avatarUrl: null,
+    });
+    const { data, error } = await supabase
+      .from("location_reviews")
+      .insert([
+        {
+          location_id: input.locationId,
+          user_id: user.id,
+          rating: input.rating,
+          text: input.text,
+        },
+      ])
+      .select("id, location_id, user_id, rating, text, created_at")
+      .single<LocationReviewRow>();
+    if (error) {
+      throw error;
+    }
+    return mapLocationReview(data);
   }
 }

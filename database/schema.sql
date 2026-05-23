@@ -55,3 +55,31 @@ where is_approved = false
     or btcmap_id is not null
     or bitcoin is true
   );
+
+-- 7) User-contributed location photos
+create table if not exists public.location_photos (
+  id bigint generated always as identity primary key,
+  location_id bigint not null references public.places(id) on delete cascade,
+  user_id bigint references public.users(id) on delete set null,
+  image_url text not null,
+  caption text,
+  mime_type text,
+  size_bytes integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_location_photos_location_id_created_at
+  on public.location_photos (location_id, created_at desc);
+
+-- 8) User-contributed location reviews
+create table if not exists public.location_reviews (
+  id bigint generated always as identity primary key,
+  location_id bigint not null references public.places(id) on delete cascade,
+  user_id bigint references public.users(id) on delete set null,
+  rating integer not null check (rating between 1 and 5),
+  text text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_location_reviews_location_id_created_at
+  on public.location_reviews (location_id, created_at desc);

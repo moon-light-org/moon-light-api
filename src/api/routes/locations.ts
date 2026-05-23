@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { parseCreateLocationInput } from "../../domain/validation.js";
+import {
+  parseCreateLocationInput,
+  parseCreateLocationPhotoInput,
+  parseCreateLocationReviewInput,
+} from "../../domain/validation.js";
 import type { DbService, LocationQuery } from "../../services/db.js";
 import {
   requireTelegramAuth,
@@ -65,6 +69,14 @@ function parseLocationQuery(raw: Record<string, unknown>): LocationQuery {
   return query;
 }
 
+function parseLocationId(value: unknown): number {
+  const id = toFiniteNumber(value);
+  if (id === null || id <= 0) {
+    throw new Error("Invalid location id");
+  }
+  return Math.trunc(id);
+}
+
 export function createLocationsRouter(db: DbService) {
   const router = Router();
 
@@ -93,6 +105,74 @@ export function createLocationsRouter(db: DbService) {
       logRouteError("POST /", error);
       const message = getErrorMessage(error, "Failed to create location");
       const status = /required|Invalid|must not exceed|object/.test(message) ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.get("/:locationId/photos", async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const photos = await db.listLocationPhotos(locationId);
+      res.json(photos);
+    } catch (error) {
+      logRouteError("GET /:locationId/photos", error);
+      const message = getErrorMessage(error, "Failed to fetch photos");
+      const status = /Invalid location id/.test(message) ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.post("/:locationId/photos", requireTelegramAuth, async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const telegramReq = req as TelegramAuthRequest;
+      const input = parseCreateLocationPhotoInput(req.body);
+      const created = await db.addLocationPhoto({
+        telegramId: telegramReq.telegram!.user.id,
+        locationId,
+        dataUrl: input.dataUrl,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      logRouteError("POST /:locationId/photos", error);
+      const message = getErrorMessage(error, "Failed to upload photo");
+      const status =
+        /Invalid location id|required|Only image|Unsupported image format|1MB|object/.test(message)
+          ? 400
+          : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.get("/:locationId/reviews", async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const reviews = await db.listLocationReviews(locationId);
+      res.json(reviews);
+    } catch (error) {
+      logRouteError("GET /:locationId/reviews", error);
+      const message = getErrorMessage(error, "Failed to fetch reviews");
+      const status = /Invalid location id/.test(message) ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.post("/:locationId/reviews", requireTelegramAuth, async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const telegramReq = req as TelegramAuthRequest;
+      const input = parseCreateLocationReviewInput(req.body);
+      const created = await db.addLocationReview({
+        telegramId: telegramReq.telegram!.user.id,
+        locationId,
+        rating: input.rating,
+        text: input.text,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      logRouteError("POST /:locationId/reviews", error);
+      const message = getErrorMessage(error, "Failed to add review");
+      const status = /Invalid location id|rating must|must not exceed|object/.test(message) ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
