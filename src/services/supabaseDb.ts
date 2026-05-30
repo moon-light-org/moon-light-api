@@ -200,6 +200,10 @@ function isUniqueNicknameViolation(error: unknown): boolean {
 }
 
 export class SupabaseDbService implements DbService {
+  async getUserByTelegramId(telegramId: string): Promise<UserProfile | null> {
+    return findUserByTelegramId(telegramId);
+  }
+
   async getOrCreateUser(input: CreateUserInput): Promise<UserProfile> {
     const normalizedNickname = normalizeNickname(input.nickname);
     const existing = await findUserByTelegramId(input.telegramId);
@@ -264,13 +268,49 @@ export class SupabaseDbService implements DbService {
     return mapUser(data);
   }
 
+  async listUsers(): Promise<UserProfile[]> {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, telegram_id, nickname, avatar_url, role, created_at")
+      .order("created_at", { ascending: false });
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map((row) => mapUser(row as UserRow));
+  }
+
+  async updateUserRole(userId: number, role: "admin" | "user"): Promise<UserProfile> {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ role })
+      .eq("id", userId)
+      .select("id, telegram_id, nickname, avatar_url, role, created_at")
+      .single<UserRow>();
+    if (error) {
+      throw error;
+    }
+    return mapUser(data);
+  }
+
   async listApprovedLocations(query?: LocationQuery): Promise<Location[]> {
+    return this.listLocationsByApproval(true, query);
+  }
+
+  async listAllLocations(query?: LocationQuery): Promise<Location[]> {
+    return this.listLocationsByApproval(null, query);
+  }
+
+  private async listLocationsByApproval(
+    isApproved: boolean | null,
+    query?: LocationQuery
+  ): Promise<Location[]> {
     let request = supabase
       .from("places")
-      .select(
-        "id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at"
-      )
-      .eq("is_approved", true);
+      .select("id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at");
+
+    if (isApproved !== null) {
+      request = request.eq("is_approved", isApproved);
+    }
 
     if (query?.bbox) {
       request = request
@@ -296,7 +336,7 @@ export class SupabaseDbService implements DbService {
     const { data, error } = await request;
 
     if (error) {
-      console.error("[db:listApprovedLocations] Supabase query failed", toErrorPayload(error));
+      console.error("[db:listLocationsByApproval] Supabase query failed", toErrorPayload(error));
       throw error;
     }
 
@@ -339,6 +379,32 @@ export class SupabaseDbService implements DbService {
     }
 
     return mapLocation(data);
+  }
+
+  async deleteLocationById(locationId: number): Promise<void> {
+    const { error: reviewsError } = await supabase
+      .from("location_reviews")
+      .delete()
+      .eq("location_id", locationId);
+    if (reviewsError) {
+      throw reviewsError;
+    }
+
+    const { error: photosError } = await supabase
+      .from("location_photos")
+      .delete()
+      .eq("location_id", locationId);
+    if (photosError) {
+      throw photosError;
+    }
+
+    const { error: locationError } = await supabase
+      .from("places")
+      .delete()
+      .eq("id", locationId);
+    if (locationError) {
+      throw locationError;
+    }
   }
 
   async listLocationPhotos(locationId: number): Promise<LocationPhoto[]> {
@@ -424,5 +490,15 @@ export class SupabaseDbService implements DbService {
       throw error;
     }
     return mapLocationReview(data);
+  }
+
+  async deleteLocationReviewById(reviewId: number): Promise<void> {
+    const { error } = await supabase
+      .from("location_reviews")
+      .delete()
+      .eq("id", reviewId);
+    if (error) {
+      throw error;
+    }
   }
 }

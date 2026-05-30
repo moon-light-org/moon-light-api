@@ -3,6 +3,7 @@ import cors from "cors";
 import { softTelegramAuth } from "./middleware/telegramAuth.js";
 import { createUsersRouter } from "./api/routes/users.js";
 import { createLocationsRouter } from "./api/routes/locations.js";
+import { createAdminRouter } from "./api/routes/admin.js";
 import type { DbService } from "./services/db.js";
 
 export function createApp(db: DbService) {
@@ -17,6 +18,7 @@ export function createApp(db: DbService) {
 
   app.use("/api/users", createUsersRouter(db));
   app.use("/api/locations", createLocationsRouter(db));
+  app.use("/api/admin", createAdminRouter(db));
 
   return app;
 }
