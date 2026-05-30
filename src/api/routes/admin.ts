@@ -45,6 +45,10 @@ function parseRole(raw: unknown): "admin" | "user" {
   throw new Error("Invalid role: expected admin or user");
 }
 
+function isAdminRole(role: string | null | undefined): boolean {
+  return (role ?? "").trim().toLowerCase() === "admin";
+}
+
 export function createAdminRouter(db: DbService) {
   const router = Router();
   router.use(requireTelegramAuth);
@@ -58,7 +62,7 @@ export function createAdminRouter(db: DbService) {
         return;
       }
       const user = await db.getUserByTelegramId(telegramId);
-      if (!user || user.role !== "admin") {
+      if (!user || !isAdminRole(user.role)) {
         res.status(403).json({ error: "Admin access required" });
         return;
       }

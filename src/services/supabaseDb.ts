@@ -90,12 +90,13 @@ function toErrorPayload(error: unknown) {
 }
 
 function mapUser(row: UserRow): UserProfile {
+  const normalizedRole = typeof row.role === "string" ? row.role.trim().toLowerCase() : "user";
   return {
     id: row.id,
     telegram_id: row.telegram_id,
     nickname: row.nickname,
     avatar_url: row.avatar_url,
-    role: row.role ?? "user",
+    role: normalizedRole.length > 0 ? normalizedRole : "user",
     created_at: row.created_at,
   };
 }
