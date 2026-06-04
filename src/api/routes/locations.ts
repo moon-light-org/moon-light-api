@@ -1,7 +1,6 @@
 import { Router } from "express";
 import {
   parseCreateLocationInput,
-  parseCreateLocationPhotoInput,
   parseCreateLocationReviewInput,
 } from "../../domain/validation.js";
 import type { DbService, LocationQuery } from "../../services/db.js";
@@ -118,28 +117,6 @@ export function createLocationsRouter(db: DbService) {
       logRouteError("GET /:locationId/photos", error);
       const message = getErrorMessage(error, "Failed to fetch photos");
       const status = /Invalid location id/.test(message) ? 400 : 500;
-      res.status(status).json({ error: message });
-    }
-  });
-
-  router.post("/:locationId/photos", requireTelegramAuth, async (req, res) => {
-    try {
-      const locationId = parseLocationId(req.params.locationId);
-      const telegramReq = req as TelegramAuthRequest;
-      const input = parseCreateLocationPhotoInput(req.body);
-      const created = await db.addLocationPhoto({
-        telegramId: telegramReq.telegram!.user.id,
-        locationId,
-        dataUrl: input.dataUrl,
-      });
-      res.status(201).json(created);
-    } catch (error) {
-      logRouteError("POST /:locationId/photos", error);
-      const message = getErrorMessage(error, "Failed to upload photo");
-      const status =
-        /Invalid location id|required|Only image|Unsupported image format|1MB|object/.test(message)
-          ? 400
-          : 500;
       res.status(status).json({ error: message });
     }
   });
