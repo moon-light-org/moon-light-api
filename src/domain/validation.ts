@@ -5,7 +5,9 @@ import {
   type LocationCategory,
 } from "./types.js";
 
-export type CreateUserBodyInput = Omit<CreateUserInput, "telegramId">;
+export type CreateUserBodyInput = Omit<CreateUserInput, "telegramId" | "avatarUrl"> & {
+  avatarUrl?: string | null;
+};
 export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
 export type CreateLocationPhotoBodyInput = { dataUrl: string };
 export type CreateLocationReviewBodyInput = { rating: number; text: string | null };
@@ -63,9 +65,11 @@ export function parseCreateUserInput(raw: unknown): CreateUserBodyInput {
 
   const source = raw as Record<string, unknown>;
   const nickname = optionalTrimmedString(source.nickname);
-  const avatarUrl = optionalTrimmedString(source.avatarUrl);
+  const avatarUrl = Object.prototype.hasOwnProperty.call(source, "avatarUrl")
+    ? optionalTrimmedString(source.avatarUrl)
+    : undefined;
 
-  return { nickname, avatarUrl };
+  return avatarUrl === undefined ? { nickname } : { nickname, avatarUrl };
 }
 
 export function parseCreateLocationInput(raw: unknown): CreateLocationBodyInput {
