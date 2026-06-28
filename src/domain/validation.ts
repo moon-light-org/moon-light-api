@@ -65,6 +65,9 @@ export function parseCreateUserInput(raw: unknown): CreateUserBodyInput {
 
   const source = raw as Record<string, unknown>;
   const nickname = optionalTrimmedString(source.nickname);
+  if (nickname && (nickname.length < 2 || nickname.length > 32)) {
+    throw new Error("nickname must be between 2 and 32 characters");
+  }
   const avatarUrl = Object.prototype.hasOwnProperty.call(source, "avatarUrl")
     ? optionalTrimmedString(source.avatarUrl)
     : undefined;

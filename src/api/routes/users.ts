@@ -17,8 +17,8 @@ export function createUsersRouter(db: DbService) {
       const telegramUser = telegramReq.telegram!.user;
       const user = await db.getOrCreateUser({
         telegramId: telegramUser.id,
-        nickname: input.nickname ?? telegramUser.username ?? telegramUser.firstName,
-        avatarUrl: input.avatarUrl ?? telegramUser.photoUrl,
+        nickname: input.nickname,
+        avatarUrl: input.avatarUrl ?? null,
       });
       res.status(200).json(user);
     } catch (error) {

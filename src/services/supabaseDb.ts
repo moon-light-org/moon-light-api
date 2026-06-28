@@ -10,6 +10,7 @@ import type {
   UserProfile,
 } from "../domain/types.js";
 import type { DbService, LocationQuery } from "./db.js";
+import { createDefaultNickname } from "../domain/userDefaults.js";
 
 type UserRow = {
   id: number;
@@ -246,7 +247,7 @@ export class SupabaseDbService implements DbService {
       .insert([
         {
           telegram_id: input.telegramId,
-          nickname: normalizedNickname ?? "",
+          nickname: normalizedNickname ?? createDefaultNickname(input.telegramId),
           avatar_url: input.avatarUrl,
         },
       ])
