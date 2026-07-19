@@ -189,6 +189,14 @@ function normalizeNickname(nickname: string | null): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+async function getRequiredUserByTelegramId(telegramId: string): Promise<UserProfile> {
+  const user = await findUserByTelegramId(telegramId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  return user;
+}
+
 function isUniqueNicknameViolation(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -206,40 +214,11 @@ export class SupabaseDbService implements DbService {
     return findUserByTelegramId(telegramId);
   }
 
-  async getOrCreateUser(input: CreateUserInput): Promise<UserProfile> {
+  async createUser(input: CreateUserInput): Promise<UserProfile> {
     const normalizedNickname = normalizeNickname(input.nickname);
     const existing = await findUserByTelegramId(input.telegramId);
     if (existing) {
-      const shouldUpdateNickname =
-        normalizedNickname !== null && normalizedNickname !== existing.nickname;
-      const shouldUpdateAvatar = input.avatarUrl !== undefined && input.avatarUrl !== existing.avatar_url;
-      if (!shouldUpdateNickname && !shouldUpdateAvatar) {
-        return existing;
-      }
-
-      const payload: { nickname?: string; avatar_url?: string | null } = {};
-      if (shouldUpdateNickname) {
-        payload.nickname = normalizedNickname;
-      }
-      if (shouldUpdateAvatar) {
-        payload.avatar_url = input.avatarUrl;
-      }
-
-      const { data: updated, error: updateError } = await supabase
-        .from("users")
-        .update(payload)
-        .eq("telegram_id", input.telegramId)
-        .select("id, telegram_id, nickname, avatar_url, role, created_at")
-        .single<UserRow>();
-
-      if (updateError) {
-        if (isUniqueNicknameViolation(updateError)) {
-          throw new Error("Nickname is already taken");
-        }
-        throw updateError;
-      }
-
-      return mapUser(updated);
+      throw new Error("User already exists");
     }
 
     const { data, error } = await supabase
@@ -247,7 +226,13 @@ export class SupabaseDbService implements DbService {
       .insert([
         {
           telegram_id: input.telegramId,
-          nickname: normalizedNickname ?? createDefaultNickname(input.telegramId),
+          nickname:
+            normalizedNickname ??
+            createDefaultNickname({
+              telegramId: input.telegramId,
+              firstName: input.firstName,
+              username: input.username,
+            }),
           avatar_url: input.avatarUrl,
         },
       ])
@@ -261,13 +246,56 @@ export class SupabaseDbService implements DbService {
       if (error.code === "23505") {
         const fetched = await findUserByTelegramId(input.telegramId);
         if (fetched) {
-          return fetched;
+          throw new Error("User already exists");
         }
       }
       throw error;
     }
 
     return mapUser(data);
+  }
+
+  async updateUserProfile(input: CreateUserInput): Promise<UserProfile> {
+    const existing = await getRequiredUserByTelegramId(input.telegramId);
+    const normalizedNickname = normalizeNickname(input.nickname);
+    const shouldUpdateNickname = normalizedNickname !== null && normalizedNickname !== existing.nickname;
+    const shouldUpdateAvatar = input.avatarUrl !== undefined && input.avatarUrl !== existing.avatar_url;
+
+    if (!shouldUpdateNickname && !shouldUpdateAvatar) {
+      return existing;
+    }
+
+    const payload: { nickname?: string; avatar_url?: string | null } = {};
+    if (shouldUpdateNickname) {
+      payload.nickname = normalizedNickname;
+    }
+    if (shouldUpdateAvatar) {
+      payload.avatar_url = input.avatarUrl;
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("users")
+      .update(payload)
+      .eq("telegram_id", input.telegramId)
+      .select("id, telegram_id, nickname, avatar_url, role, created_at")
+      .single<UserRow>();
+
+    if (updateError) {
+      if (isUniqueNicknameViolation(updateError)) {
+        throw new Error("Nickname is already taken");
+      }
+      throw updateError;
+    }
+
+    return mapUser(updated);
+  }
+
+  async getOrCreateUser(input: CreateUserInput): Promise<UserProfile> {
+    const existing = await findUserByTelegramId(input.telegramId);
+    if (existing) {
+      return this.updateUserProfile(input);
+    }
+    return this.createUser(input);
   }
 
   async listUsers(): Promise<UserProfile[]> {
@@ -346,11 +374,7 @@ export class SupabaseDbService implements DbService {
   }
 
   async createLocation(input: CreateLocationInput): Promise<Location> {
-    const user = await this.getOrCreateUser({
-      telegramId: input.telegramId,
-      nickname: null,
-      avatarUrl: null,
-    });
+    const user = await getRequiredUserByTelegramId(input.telegramId);
 
     const { data, error } = await supabase
       .from("places")
@@ -422,11 +446,7 @@ export class SupabaseDbService implements DbService {
   }
 
   async addLocationPhoto(input: CreateLocationPhotoInput): Promise<LocationPhoto> {
-    const user = await this.getOrCreateUser({
-      telegramId: input.telegramId,
-      nickname: null,
-      avatarUrl: null,
-    });
+    const user = await getRequiredUserByTelegramId(input.telegramId);
     const parsed = parseImageDataUrl(input.dataUrl);
     const path = `${input.locationId}/${Date.now()}-${user.id}.${parsed.extension}`;
     const { error: uploadError } = await supabase.storage
@@ -471,11 +491,7 @@ export class SupabaseDbService implements DbService {
   }
 
   async addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview> {
-    const user = await this.getOrCreateUser({
-      telegramId: input.telegramId,
-      nickname: null,
-      avatarUrl: null,
-    });
+    const user = await getRequiredUserByTelegramId(input.telegramId);
     const { data, error } = await supabase
       .from("location_reviews")
       .insert([

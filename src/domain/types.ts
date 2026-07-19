@@ -28,6 +28,8 @@ export type Location = {
 
 export type CreateUserInput = {
   telegramId: string;
+  firstName: string;
+  username: string | null;
   nickname: string | null;
   avatarUrl: string | null;
 };

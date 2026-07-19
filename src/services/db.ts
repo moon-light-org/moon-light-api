@@ -22,7 +22,9 @@ export type LocationQuery = {
 
 export interface DbService {
   getOrCreateUser(input: CreateUserInput): Promise<UserProfile>;
+  createUser(input: CreateUserInput): Promise<UserProfile>;
   getUserByTelegramId(telegramId: string): Promise<UserProfile | null>;
+  updateUserProfile(input: CreateUserInput): Promise<UserProfile>;
   listUsers(): Promise<UserProfile[]>;
   updateUserRole(userId: number, role: "admin" | "user"): Promise<UserProfile>;
   listApprovedLocations(query?: LocationQuery): Promise<Location[]>;

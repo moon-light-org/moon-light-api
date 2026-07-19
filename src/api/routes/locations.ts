@@ -103,7 +103,11 @@ export function createLocationsRouter(db: DbService) {
     } catch (error) {
       logRouteError("POST /", error);
       const message = getErrorMessage(error, "Failed to create location");
-      const status = /required|Invalid|must not exceed|object/.test(message) ? 400 : 500;
+      const status = /required|Invalid|must not exceed|object/.test(message)
+        ? 400
+        : /User not found/i.test(message)
+        ? 404
+        : 500;
       res.status(status).json({ error: message });
     }
   });
@@ -149,7 +153,11 @@ export function createLocationsRouter(db: DbService) {
     } catch (error) {
       logRouteError("POST /:locationId/reviews", error);
       const message = getErrorMessage(error, "Failed to add review");
-      const status = /Invalid location id|rating must|must not exceed|object/.test(message) ? 400 : 500;
+      const status = /Invalid location id|rating must|must not exceed|object/.test(message)
+        ? 400
+        : /User not found/i.test(message)
+        ? 404
+        : 500;
       res.status(status).json({ error: message });
     }
   });

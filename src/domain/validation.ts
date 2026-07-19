@@ -1,11 +1,11 @@
 import {
   allowedLocationCategories,
   type CreateLocationInput,
-  type CreateUserInput,
   type LocationCategory,
 } from "./types.js";
 
-export type CreateUserBodyInput = Omit<CreateUserInput, "telegramId" | "avatarUrl"> & {
+export type CreateUserBodyInput = {
+  nickname: string | null;
   avatarUrl?: string | null;
 };
 export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
