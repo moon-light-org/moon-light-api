@@ -1,4 +1,5 @@
 import type {
+  AdminLocationReport,
   CreateLocationInput,
   CreateLocationPhotoInput,
   CreateLocationReportInput,
@@ -38,5 +39,6 @@ export interface DbService {
   listLocationReviews(locationId: number): Promise<LocationReview[]>;
   addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview>;
   addLocationReport(input: CreateLocationReportInput): Promise<LocationReport>;
+  listLocationReports(): Promise<AdminLocationReport[]>;
   deleteLocationReviewById(reviewId: number): Promise<void>;
 }

@@ -83,6 +83,16 @@ export function createAdminRouter(db: DbService) {
     }
   });
 
+  router.get("/reports", async (_req, res) => {
+    try {
+      const reports = await db.listLocationReports();
+      res.json(reports);
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to fetch reports");
+      res.status(500).json({ error: message });
+    }
+  });
+
   router.patch("/members/:userId/role", async (req, res) => {
     try {
       const userId = parseId(req.params.userId, "user id");

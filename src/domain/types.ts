@@ -80,6 +80,10 @@ export type LocationReport = {
   created_at: string;
 };
 
+export type AdminLocationReport = Omit<LocationReport, "user_id"> & {
+  location_name: string;
+};
+
 export type CreateLocationPhotoInput = {
   telegramId: string;
   locationId: number;

@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import type {
+  AdminLocationReport,
   CreateLocationInput,
   CreateLocationPhotoInput,
   CreateLocationReportInput,
@@ -67,6 +68,10 @@ type LocationReportRow = {
   reasons: LocationReport["reasons"];
   text: string | null;
   created_at: string;
+};
+
+type AdminLocationReportRow = LocationReportRow & {
+  places: { name: string } | { name: string }[];
 };
 
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
@@ -212,6 +217,15 @@ function mapLocationReport(row: LocationReportRow): LocationReport {
     reasons: row.reasons,
     text: row.text,
     created_at: row.created_at,
+  };
+}
+
+function mapAdminLocationReport(row: AdminLocationReportRow): AdminLocationReport {
+  const { user_id: _userId, ...report } = mapLocationReport(row);
+  const place = Array.isArray(row.places) ? row.places[0] : row.places;
+  return {
+    ...report,
+    location_name: place!.name,
   };
 }
 
@@ -563,6 +577,17 @@ export class SupabaseDbService implements DbService {
       throw error;
     }
     return mapLocationReport(data);
+  }
+
+  async listLocationReports(): Promise<AdminLocationReport[]> {
+    const { data, error } = await supabase
+      .from("location_reports")
+      .select("id, location_id, user_id, reasons, text, created_at, places!inner(name)")
+      .order("created_at", { ascending: false });
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map((row) => mapAdminLocationReport(row as AdminLocationReportRow));
   }
 
   async deleteLocationReviewById(reviewId: number): Promise<void> {
