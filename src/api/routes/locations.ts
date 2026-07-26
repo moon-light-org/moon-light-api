@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   parseCreateLocationInput,
+  parseCreateLocationReportInput,
   parseCreateLocationReviewInput,
 } from "../../domain/validation.js";
 import type { DbService, LocationQuery } from "../../services/db.js";
@@ -146,6 +147,8 @@ export function createLocationsRouter(db: DbService) {
       const created = await db.addLocationReview({
         telegramId: telegramReq.telegram!.user.id,
         locationId,
+        paymentStatus: input.paymentStatus,
+        wallet: input.wallet,
         rating: input.rating,
         text: input.text,
       });
@@ -154,6 +157,30 @@ export function createLocationsRouter(db: DbService) {
       logRouteError("POST /:locationId/reviews", error);
       const message = getErrorMessage(error, "Failed to add review");
       const status = /Invalid location id|rating must|must not exceed|object/.test(message)
+        ? 400
+        : /User not found/i.test(message)
+        ? 404
+        : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.post("/:locationId/reports", requireTelegramAuth, async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const telegramReq = req as TelegramAuthRequest;
+      const input = parseCreateLocationReportInput(req.body);
+      const created = await db.addLocationReport({
+        telegramId: telegramReq.telegram!.user.id,
+        locationId,
+        reasons: input.reasons,
+        text: input.text,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      logRouteError("POST /:locationId/reports", error);
+      const message = getErrorMessage(error, "Failed to report location");
+      const status = /Invalid location id|reasons|report reason|must not exceed|object/.test(message)
         ? 400
         : /User not found/i.test(message)
         ? 404

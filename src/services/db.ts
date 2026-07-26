@@ -1,10 +1,12 @@
 import type {
   CreateLocationInput,
   CreateLocationPhotoInput,
+  CreateLocationReportInput,
   CreateLocationReviewInput,
   CreateUserInput,
   Location,
   LocationPhoto,
+  LocationReport,
   LocationReview,
   UserProfile,
 } from "../domain/types.js";
@@ -35,5 +37,6 @@ export interface DbService {
   addLocationPhoto(input: CreateLocationPhotoInput): Promise<LocationPhoto>;
   listLocationReviews(locationId: number): Promise<LocationReview[]>;
   addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview>;
+  addLocationReport(input: CreateLocationReportInput): Promise<LocationReport>;
   deleteLocationReviewById(reviewId: number): Promise<void>;
 }

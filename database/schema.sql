@@ -83,3 +83,39 @@ create table if not exists public.location_reviews (
 
 create index if not exists idx_location_reviews_location_id_created_at
   on public.location_reviews (location_id, created_at desc);
+
+-- 9) Structured review details and user-submitted location reports
+alter table if exists public.location_reviews
+  add column if not exists payment_status text,
+  add column if not exists wallet text;
+
+alter table if exists public.location_reviews
+  alter column rating drop not null;
+
+-- Existing star-only reviews predate payment status; retain them as Lightning reviews.
+update public.location_reviews
+set payment_status = 'lightning'
+where payment_status is null;
+
+-- Legacy 1-5 stars do not have the same meaning as the new optional 0-3 benefit rating.
+update public.location_reviews
+set rating = null;
+
+alter table if exists public.location_reviews
+  alter column payment_status set not null;
+
+alter table if exists public.location_reviews
+  drop constraint if exists location_reviews_rating_check,
+  add constraint location_reviews_rating_check check (rating is null or rating between 0 and 3);
+
+create table if not exists public.location_reports (
+  id bigint generated always as identity primary key,
+  location_id bigint not null references public.places(id) on delete cascade,
+  user_id bigint references public.users(id) on delete set null,
+  reasons text[] not null check (cardinality(reasons) > 0),
+  text text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_location_reports_location_id_created_at
+  on public.location_reports (location_id, created_at desc);

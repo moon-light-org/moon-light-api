@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "set:webhook": "node dist/scripts/setWebhook.js",
-    "test": "npm run build --silent && node tests/userDefaults.spec.mjs"
+    "test": "npm run build --silent && node tests/userDefaults.spec.mjs && node tests/locationContributions.spec.mjs"
   },
   "keywords": [],
   "author": "",

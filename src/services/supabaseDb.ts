@@ -2,10 +2,12 @@ import { supabase } from "../lib/supabase.js";
 import type {
   CreateLocationInput,
   CreateLocationPhotoInput,
+  CreateLocationReportInput,
   CreateLocationReviewInput,
   CreateUserInput,
   Location,
   LocationPhoto,
+  LocationReport,
   LocationReview,
   UserProfile,
 } from "../domain/types.js";
@@ -51,7 +53,18 @@ type LocationReviewRow = {
   id: number;
   location_id: number;
   user_id: number | null;
-  rating: number;
+  payment_status: LocationReview["payment_status"];
+  wallet: LocationReview["wallet"];
+  rating: number | null;
+  text: string | null;
+  created_at: string;
+};
+
+type LocationReportRow = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  reasons: LocationReport["reasons"];
   text: string | null;
   created_at: string;
 };
@@ -137,6 +150,8 @@ function mapLocationReview(row: LocationReviewRow): LocationReview {
     id: row.id,
     location_id: row.location_id,
     user_id: row.user_id,
+    payment_status: row.payment_status,
+    wallet: row.wallet,
     rating: row.rating,
     text: row.text,
     created_at: row.created_at,
@@ -187,6 +202,17 @@ function normalizeNickname(nickname: string | null): string | null {
   }
   const trimmed = nickname.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function mapLocationReport(row: LocationReportRow): LocationReport {
+  return {
+    id: row.id,
+    location_id: row.location_id,
+    user_id: row.user_id,
+    reasons: row.reasons,
+    text: row.text,
+    created_at: row.created_at,
+  };
 }
 
 async function getRequiredUserByTelegramId(telegramId: string): Promise<UserProfile> {
@@ -408,6 +434,13 @@ export class SupabaseDbService implements DbService {
   }
 
   async deleteLocationById(locationId: number): Promise<void> {
+    const { error: reportsError } = await supabase
+      .from("location_reports")
+      .delete()
+      .eq("location_id", locationId);
+    if (reportsError) {
+      throw reportsError;
+    }
     const { error: reviewsError } = await supabase
       .from("location_reviews")
       .delete()
@@ -481,7 +514,7 @@ export class SupabaseDbService implements DbService {
   async listLocationReviews(locationId: number): Promise<LocationReview[]> {
     const { data, error } = await supabase
       .from("location_reviews")
-      .select("id, location_id, user_id, rating, text, created_at")
+      .select("id, location_id, user_id, payment_status, wallet, rating, text, created_at")
       .eq("location_id", locationId)
       .order("created_at", { ascending: false });
     if (error) {
@@ -498,16 +531,38 @@ export class SupabaseDbService implements DbService {
         {
           location_id: input.locationId,
           user_id: user.id,
+          payment_status: input.paymentStatus,
+          wallet: input.wallet,
           rating: input.rating,
           text: input.text,
         },
       ])
-      .select("id, location_id, user_id, rating, text, created_at")
+      .select("id, location_id, user_id, payment_status, wallet, rating, text, created_at")
       .single<LocationReviewRow>();
     if (error) {
       throw error;
     }
     return mapLocationReview(data);
+  }
+
+  async addLocationReport(input: CreateLocationReportInput): Promise<LocationReport> {
+    const user = await getRequiredUserByTelegramId(input.telegramId);
+    const { data, error } = await supabase
+      .from("location_reports")
+      .insert([
+        {
+          location_id: input.locationId,
+          user_id: user.id,
+          reasons: input.reasons,
+          text: input.text,
+        },
+      ])
+      .select("id, location_id, user_id, reasons, text, created_at")
+      .single<LocationReportRow>();
+    if (error) {
+      throw error;
+    }
+    return mapLocationReport(data);
   }
 
   async deleteLocationReviewById(reviewId: number): Promise<void> {

@@ -1,5 +1,8 @@
 import {
   allowedLocationCategories,
+  locationPaymentStatuses,
+  locationReportReasons,
+  locationWallets,
   type CreateLocationInput,
   type LocationCategory,
 } from "./types.js";
@@ -10,7 +13,16 @@ export type CreateUserBodyInput = {
 };
 export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
 export type CreateLocationPhotoBodyInput = { dataUrl: string };
-export type CreateLocationReviewBodyInput = { rating: number; text: string | null };
+export type CreateLocationReviewBodyInput = {
+  paymentStatus: (typeof locationPaymentStatuses)[number];
+  wallet: (typeof locationWallets)[number] | null;
+  rating: number | null;
+  text: string | null;
+};
+export type CreateLocationReportBodyInput = {
+  reasons: (typeof locationReportReasons)[number][];
+  text: string | null;
+};
 
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -114,15 +126,57 @@ export function parseCreateLocationReviewInput(raw: unknown): CreateLocationRevi
     throw new Error("Request body must be an object");
   }
   const source = raw as Record<string, unknown>;
-  const rating = Number(source.rating);
-  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    throw new Error("rating must be an integer from 1 to 5");
+  const paymentStatus = asTrimmedString(source.paymentStatus);
+  if (!paymentStatus) {
+    throw new Error("paymentStatus is required");
+  }
+  if (!(locationPaymentStatuses as readonly string[]).includes(paymentStatus)) {
+    throw new Error(`Invalid paymentStatus: expected one of ${locationPaymentStatuses.join(", ")}`);
+  }
+  const walletValue = asTrimmedString(source.wallet);
+  if (walletValue && !(locationWallets as readonly string[]).includes(walletValue)) {
+    throw new Error(`Invalid wallet: expected one of ${locationWallets.join(", ")}`);
+  }
+  const ratingValue = source.rating;
+  const rating = ratingValue === undefined || ratingValue === null || ratingValue === "" ? null : Number(ratingValue);
+  if (rating !== null && (!Number.isInteger(rating) || rating < 0 || rating > 3)) {
+    throw new Error("rating must be an integer from 0 to 3");
   }
   const text = optionalTrimmedString(source.text);
   if (text && text.length > 600) {
     throw new Error("text must not exceed 600 characters");
   }
-  return { rating, text };
+  return {
+    paymentStatus: paymentStatus as CreateLocationReviewBodyInput["paymentStatus"],
+    wallet: walletValue ? (walletValue as CreateLocationReviewBodyInput["wallet"]) : null,
+    rating,
+    text,
+  };
+}
+
+export function parseCreateLocationReportInput(raw: unknown): CreateLocationReportBodyInput {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Request body must be an object");
+  }
+  const source = raw as Record<string, unknown>;
+  if (!Array.isArray(source.reasons) || source.reasons.length === 0) {
+    throw new Error("reasons must contain at least one reason");
+  }
+  const reasons = source.reasons.map((value) => {
+    const reason = asTrimmedString(value);
+    if (!(locationReportReasons as readonly string[]).includes(reason)) {
+      throw new Error(`Invalid report reason: expected one of ${locationReportReasons.join(", ")}`);
+    }
+    return reason as CreateLocationReportBodyInput["reasons"][number];
+  });
+  if (new Set(reasons).size !== reasons.length) {
+    throw new Error("reasons must not contain duplicates");
+  }
+  const text = optionalTrimmedString(source.text);
+  if (text && text.length > 600) {
+    throw new Error("text must not exceed 600 characters");
+  }
+  return { reasons, text };
 }
 
 export { allowedLocationCategories };

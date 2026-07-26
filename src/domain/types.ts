@@ -1,4 +1,7 @@
 export const allowedLocationCategories = ["grocery", "restaurant-bar", "other"] as const;
+export const locationPaymentStatuses = ["lightning", "btc_only", "neither"] as const;
+export const locationWallets = ["wallet_of_satoshi", "muun", "breez", "blw", "eclair", "zap", "phoenix", "blue_wallet", "other"] as const;
+export const locationReportReasons = ["missing", "no_lightning_or_btc", "illegal_service", "poor_service", "other"] as const;
 
 export type LocationCategory = (typeof allowedLocationCategories)[number];
 
@@ -61,7 +64,18 @@ export type LocationReview = {
   id: number;
   location_id: number;
   user_id: number | null;
-  rating: number;
+  payment_status: (typeof locationPaymentStatuses)[number];
+  wallet: (typeof locationWallets)[number] | null;
+  rating: number | null;
+  text: string | null;
+  created_at: string;
+};
+
+export type LocationReport = {
+  id: number;
+  location_id: number;
+  user_id: number | null;
+  reasons: (typeof locationReportReasons)[number][];
   text: string | null;
   created_at: string;
 };
@@ -75,6 +89,15 @@ export type CreateLocationPhotoInput = {
 export type CreateLocationReviewInput = {
   telegramId: string;
   locationId: number;
-  rating: number;
+  paymentStatus: (typeof locationPaymentStatuses)[number];
+  wallet: (typeof locationWallets)[number] | null;
+  rating: number | null;
+  text: string | null;
+};
+
+export type CreateLocationReportInput = {
+  telegramId: string;
+  locationId: number;
+  reasons: (typeof locationReportReasons)[number][];
   text: string | null;
 };
