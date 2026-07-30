@@ -14,7 +14,7 @@ export type CreateUserBodyInput = {
 export type CreateLocationBodyInput = Omit<CreateLocationInput, "telegramId">;
 export type CreateLocationPhotoBodyInput = { dataUrl: string };
 export type CreateLocationReviewBodyInput = {
-  paymentStatus: (typeof locationPaymentStatuses)[number];
+  paymentStatus: (typeof locationPaymentStatuses)[number] | null;
   wallet: (typeof locationWallets)[number] | null;
   rating: number | null;
   text: string | null;
@@ -127,10 +127,7 @@ export function parseCreateLocationReviewInput(raw: unknown): CreateLocationRevi
   }
   const source = raw as Record<string, unknown>;
   const paymentStatus = asTrimmedString(source.paymentStatus);
-  if (!paymentStatus) {
-    throw new Error("paymentStatus is required");
-  }
-  if (!(locationPaymentStatuses as readonly string[]).includes(paymentStatus)) {
+  if (paymentStatus && !(locationPaymentStatuses as readonly string[]).includes(paymentStatus)) {
     throw new Error(`Invalid paymentStatus: expected one of ${locationPaymentStatuses.join(", ")}`);
   }
   const walletValue = asTrimmedString(source.wallet);
@@ -147,7 +144,7 @@ export function parseCreateLocationReviewInput(raw: unknown): CreateLocationRevi
     throw new Error("text must not exceed 600 characters");
   }
   return {
-    paymentStatus: paymentStatus as CreateLocationReviewBodyInput["paymentStatus"],
+    paymentStatus: paymentStatus ? paymentStatus as CreateLocationReviewBodyInput["paymentStatus"] : null,
     wallet: walletValue ? (walletValue as CreateLocationReviewBodyInput["wallet"]) : null,
     rating,
     text,

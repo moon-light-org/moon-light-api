@@ -64,7 +64,7 @@ export type LocationReview = {
   id: number;
   location_id: number;
   user_id: number | null;
-  payment_status: (typeof locationPaymentStatuses)[number];
+  payment_status: (typeof locationPaymentStatuses)[number] | null;
   wallet: (typeof locationWallets)[number] | null;
   rating: number | null;
   text: string | null;
@@ -93,7 +93,7 @@ export type CreateLocationPhotoInput = {
 export type CreateLocationReviewInput = {
   telegramId: string;
   locationId: number;
-  paymentStatus: (typeof locationPaymentStatuses)[number];
+  paymentStatus: (typeof locationPaymentStatuses)[number] | null;
   wallet: (typeof locationWallets)[number] | null;
   rating: number | null;
   text: string | null;

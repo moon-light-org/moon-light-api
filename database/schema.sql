@@ -102,7 +102,7 @@ update public.location_reviews
 set rating = null;
 
 alter table if exists public.location_reviews
-  alter column payment_status set not null;
+  alter column payment_status drop not null;
 
 alter table if exists public.location_reviews
   drop constraint if exists location_reviews_rating_check,
