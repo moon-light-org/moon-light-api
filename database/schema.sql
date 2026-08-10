@@ -76,7 +76,7 @@ create sequence if not exists public.btcmap_comments_id_seq;
 
 create table if not exists public.btcmap_comments (
   id bigint primary key default nextval('public.btcmap_comments_id_seq'),
-  place_id bigint not null references public.places(id) on delete cascade,
+  place_id bigint not null,
   text text not null,
   created_at timestamptz not null default now()
 );
@@ -90,13 +90,6 @@ select setval(
   greatest(coalesce((select max(id) from public.btcmap_comments), 0) + 1, 1),
   false
 );
-
-alter table if exists public.btcmap_comments
-  drop constraint if exists btcmap_comments_place_id_fkey;
-
-alter table if exists public.btcmap_comments
-  add constraint btcmap_comments_place_id_fkey
-  foreign key (place_id) references public.places(id) on delete cascade;
 
 create index if not exists idx_btcmap_comments_place_id_created_at
   on public.btcmap_comments (place_id, created_at desc);
