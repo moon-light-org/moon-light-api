@@ -140,6 +140,9 @@ export function parseCreateLocationReviewInput(raw: unknown): CreateLocationRevi
     throw new Error("rating must be an integer from 0 to 3");
   }
   const text = optionalTrimmedString(source.text);
+  if (!text) {
+    throw new Error("Comment text is required");
+  }
   if (text && text.length > 600) {
     throw new Error("text must not exceed 600 characters");
   }

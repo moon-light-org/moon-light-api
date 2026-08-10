@@ -71,42 +71,37 @@ create table if not exists public.location_photos (
 create index if not exists idx_location_photos_location_id_created_at
   on public.location_photos (location_id, created_at desc);
 
--- 8) User-contributed location reviews
-create table if not exists public.location_reviews (
-  id bigint generated always as identity primary key,
-  location_id bigint not null references public.places(id) on delete cascade,
-  user_id bigint references public.users(id) on delete set null,
-  rating integer not null check (rating between 1 and 5),
-  text text,
+-- 8) BTCMap comments used by the app comment modal
+create sequence if not exists public.btcmap_comments_id_seq;
+
+create table if not exists public.btcmap_comments (
+  id bigint primary key default nextval('public.btcmap_comments_id_seq'),
+  place_id bigint not null references public.places(id) on delete cascade,
+  text text not null,
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_location_reviews_location_id_created_at
-  on public.location_reviews (location_id, created_at desc);
+alter table if exists public.btcmap_comments
+  alter column id set default nextval('public.btcmap_comments_id_seq'),
+  alter column created_at set default now();
 
--- 9) Structured review details and user-submitted location reports
-alter table if exists public.location_reviews
-  add column if not exists payment_status text,
-  add column if not exists wallet text;
+select setval(
+  'public.btcmap_comments_id_seq',
+  greatest(coalesce((select max(id) from public.btcmap_comments), 0) + 1, 1),
+  false
+);
 
-alter table if exists public.location_reviews
-  alter column rating drop not null;
+alter table if exists public.btcmap_comments
+  drop constraint if exists btcmap_comments_place_id_fkey;
 
--- Existing star-only reviews predate payment status; retain them as Lightning reviews.
-update public.location_reviews
-set payment_status = 'lightning'
-where payment_status is null;
+alter table if exists public.btcmap_comments
+  add constraint btcmap_comments_place_id_fkey
+  foreign key (place_id) references public.places(id) on delete cascade;
 
--- Legacy 1-5 stars do not have the same meaning as the new optional 0-3 benefit rating.
-update public.location_reviews
-set rating = null;
+create index if not exists idx_btcmap_comments_place_id_created_at
+  on public.btcmap_comments (place_id, created_at desc);
 
-alter table if exists public.location_reviews
-  alter column payment_status drop not null;
-
-alter table if exists public.location_reviews
-  drop constraint if exists location_reviews_rating_check,
-  add constraint location_reviews_rating_check check (rating is null or rating between 0 and 3);
+-- 9) User-submitted location reports
 
 create table if not exists public.location_reports (
   id bigint generated always as identity primary key,

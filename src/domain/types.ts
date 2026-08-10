@@ -62,6 +62,7 @@ export type LocationPhoto = {
 
 export type LocationReview = {
   id: number;
+  source: "app" | "btcmap";
   location_id: number;
   user_id: number | null;
   payment_status: (typeof locationPaymentStatuses)[number] | null;
