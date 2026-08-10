@@ -73,6 +73,7 @@ type AdminLocationReportRow = LocationReportRow & {
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
 const LOCATION_PHOTO_BUCKET = process.env.LOCATION_PHOTO_BUCKET ?? "location-photos";
 const MAX_UPLOAD_BYTES = 1024 * 1024;
+const LOCATION_SELECT = "id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at";
 
 type ErrorWithDetails = {
   message?: unknown;
@@ -371,9 +372,13 @@ export class SupabaseDbService implements DbService {
     isApproved: boolean | null,
     query?: LocationQuery
   ): Promise<Location[]> {
+    if (query?.search) {
+      return this.searchLocationsByApproval(isApproved, query);
+    }
+
     let request = supabase
       .from("places")
-      .select("id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at");
+      .select(LOCATION_SELECT);
 
     if (isApproved !== null) {
       request = request.eq("is_approved", isApproved);
@@ -385,13 +390,6 @@ export class SupabaseDbService implements DbService {
         .lte("lat", query.bbox.maxLat)
         .gte("lon", query.bbox.minLon)
         .lte("lon", query.bbox.maxLon);
-    }
-
-    if (query?.search) {
-      const escaped = query.search.replace(/[%_]/g, "\\$&");
-      request = request.or(
-        `name.ilike.%${escaped}%,description.ilike.%${escaped}%,category.ilike.%${escaped}%`
-      );
     }
 
     request = request.order("created_at", { ascending: false });
@@ -408,6 +406,67 @@ export class SupabaseDbService implements DbService {
     }
 
     return (data ?? []).map((row) => mapLocation(row as LocationRow));
+  }
+
+  private async searchLocationsByApproval(
+    isApproved: boolean | null,
+    query: LocationQuery
+  ): Promise<Location[]> {
+    const search = query.search?.trim();
+    if (!search) {
+      const { search: _search, ...queryWithoutSearch } = query;
+      return this.listLocationsByApproval(isApproved, queryWithoutSearch);
+    }
+
+    const escaped = search.replace(/[\\%_]/g, "\\$&");
+    const pattern = `%${escaped}%`;
+    const limit = query.limit && Number.isFinite(query.limit) && query.limit > 0
+      ? Math.min(query.limit, 200)
+      : 200;
+
+    const searchColumn = (column: "name" | "description" | "category") => {
+      let request = supabase
+        .from("places")
+        .select(LOCATION_SELECT)
+        .ilike(column, pattern);
+
+      if (isApproved !== null) {
+        request = request.eq("is_approved", isApproved);
+      }
+
+      if (query.bbox) {
+        request = request
+          .gte("lat", query.bbox.minLat)
+          .lte("lat", query.bbox.maxLat)
+          .gte("lon", query.bbox.minLon)
+          .lte("lon", query.bbox.maxLon);
+      }
+
+      return request.order("created_at", { ascending: false }).limit(limit);
+    };
+
+    const results = await Promise.all([
+      searchColumn("name"),
+      searchColumn("description"),
+      searchColumn("category"),
+    ]);
+
+    const rows = new Map<number, LocationRow>();
+    for (const result of results) {
+      if (result.error) {
+        console.error("[db:searchLocationsByApproval] Supabase query failed", toErrorPayload(result.error));
+        throw result.error;
+      }
+      for (const row of result.data ?? []) {
+        const locationRow = row as LocationRow;
+        rows.set(locationRow.id, locationRow);
+      }
+    }
+
+    return [...rows.values()]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit)
+      .map(mapLocation);
   }
 
   async createLocation(input: CreateLocationInput): Promise<Location> {
