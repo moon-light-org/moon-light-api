@@ -53,15 +53,16 @@ type LocationPhotoRow = {
   created_at: string;
 };
 
-type BtcmapCommentRow = {
+type LocationReviewRow = {
   id: number;
-  place_id: number;
-  text: string;
+  source: LocationReview["source"] | null;
+  location_id: number;
+  user_id: number | null;
+  payment_status: LocationReview["payment_status"];
+  wallet: LocationReview["wallet"];
+  rating: number | null;
+  text: string | null;
   created_at: string;
-};
-
-type BtcmapPlaceRow = {
-  id: number;
 };
 
 type LocationReportRow = {
@@ -154,15 +155,15 @@ function mapLocationPhoto(row: LocationPhotoRow): LocationPhoto {
   };
 }
 
-function mapBtcmapComment(row: BtcmapCommentRow): LocationReview {
+function mapLocationReview(row: LocationReviewRow): LocationReview {
   return {
     id: row.id,
-    source: "btcmap",
-    location_id: row.place_id,
-    user_id: null,
-    payment_status: null,
-    wallet: null,
-    rating: null,
+    source: row.source ?? "app",
+    location_id: row.location_id,
+    user_id: row.user_id,
+    payment_status: row.payment_status,
+    wallet: row.wallet,
+    rating: row.rating,
     text: row.text,
     created_at: row.created_at,
   };
@@ -476,39 +477,6 @@ export class SupabaseDbService implements DbService {
       .map(mapLocation);
   }
 
-  private async getBtcmapCommentPlaceIds(locationId: number): Promise<number[]> {
-    const ids = new Set<number>([locationId]);
-    const { data: place, error: placeError } = await supabase
-      .from("places")
-      .select("id, btcmap_id, osm_type, osm_id")
-      .eq("id", locationId)
-      .maybeSingle<Pick<LocationRow, "id" | "btcmap_id" | "osm_type" | "osm_id">>();
-
-    if (placeError) {
-      throw placeError;
-    }
-
-    if (typeof place?.btcmap_id === "number" && Number.isFinite(place.btcmap_id)) {
-      ids.add(place.btcmap_id);
-
-      const { data: btcmapPlaces, error: btcmapPlacesError } = await supabase
-        .from("btcmap_places")
-        .select("id")
-        .eq("btcmap_id", place.btcmap_id);
-
-      if (btcmapPlacesError) {
-        throw btcmapPlacesError;
-      }
-
-      for (const row of btcmapPlaces ?? []) {
-        const btcmapPlace = row as BtcmapPlaceRow;
-        ids.add(btcmapPlace.id);
-      }
-    }
-
-    return [...ids];
-  }
-
   async createLocation(input: CreateLocationInput): Promise<Location> {
     const user = await getRequiredUserByTelegramId(input.telegramId);
 
@@ -544,7 +512,6 @@ export class SupabaseDbService implements DbService {
   }
 
   async deleteLocationById(locationId: number): Promise<void> {
-    const commentPlaceIds = await this.getBtcmapCommentPlaceIds(locationId);
     const { error: reportsError } = await supabase
       .from("location_reports")
       .delete()
@@ -552,12 +519,12 @@ export class SupabaseDbService implements DbService {
     if (reportsError) {
       throw reportsError;
     }
-    const { error: commentsError } = await supabase
-      .from("btcmap_comments")
+    const { error: reviewsError } = await supabase
+      .from("location_reviews")
       .delete()
-      .in("place_id", commentPlaceIds);
-    if (commentsError) {
-      throw commentsError;
+      .eq("location_id", locationId);
+    if (reviewsError) {
+      throw reviewsError;
     }
 
     const { error: photosError } = await supabase
@@ -623,37 +590,42 @@ export class SupabaseDbService implements DbService {
   }
 
   async listLocationReviews(locationId: number): Promise<LocationReview[]> {
-    const commentPlaceIds = await this.getBtcmapCommentPlaceIds(locationId);
     const { data, error } = await supabase
-      .from("btcmap_comments")
-      .select("id, place_id, text, created_at")
-      .in("place_id", commentPlaceIds)
+      .from("location_reviews")
+      .select("id, source, location_id, user_id, payment_status, wallet, rating, text, created_at")
+      .eq("location_id", locationId)
       .order("created_at", { ascending: false });
     if (error) {
       throw error;
     }
-    return (data ?? []).map((row) => mapBtcmapComment(row as BtcmapCommentRow));
+    return (data ?? []).map((row) => mapLocationReview(row as LocationReviewRow));
   }
 
   async addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview> {
+    const user = await getRequiredUserByTelegramId(input.telegramId);
     const text = input.text?.trim();
     if (!text) {
       throw new Error("Comment text is required");
     }
     const { data, error } = await supabase
-      .from("btcmap_comments")
+      .from("location_reviews")
       .insert([
         {
-          place_id: input.locationId,
+          source: "app",
+          location_id: input.locationId,
+          user_id: user.id,
+          payment_status: input.paymentStatus,
+          wallet: input.wallet,
+          rating: input.rating,
           text,
         },
       ])
-      .select("id, place_id, text, created_at")
-      .single<BtcmapCommentRow>();
+      .select("id, source, location_id, user_id, payment_status, wallet, rating, text, created_at")
+      .single<LocationReviewRow>();
     if (error) {
       throw error;
     }
-    return mapBtcmapComment(data);
+    return mapLocationReview(data);
   }
 
   async addLocationReport(input: CreateLocationReportInput): Promise<LocationReport> {
@@ -689,7 +661,7 @@ export class SupabaseDbService implements DbService {
 
   async deleteLocationReviewById(reviewId: number): Promise<void> {
     const { error } = await supabase
-      .from("btcmap_comments")
+      .from("location_reviews")
       .delete()
       .eq("id", reviewId);
     if (error) {

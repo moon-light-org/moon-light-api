@@ -71,7 +71,7 @@ create table if not exists public.location_photos (
 create index if not exists idx_location_photos_location_id_created_at
   on public.location_photos (location_id, created_at desc);
 
--- 8) BTCMap comments used by the app comment modal
+-- 8) BTCMap comments legacy import source
 create sequence if not exists public.btcmap_comments_id_seq;
 
 create table if not exists public.btcmap_comments (
@@ -94,7 +94,29 @@ select setval(
 create index if not exists idx_btcmap_comments_place_id_created_at
   on public.btcmap_comments (place_id, created_at desc);
 
--- 9) User-submitted location reports
+-- 9) Location reviews used by the app review/comment modal
+create table if not exists public.location_reviews (
+  id bigint generated always as identity primary key,
+  location_id bigint not null references public.places(id) on delete cascade,
+  user_id bigint references public.users(id) on delete set null,
+  rating integer check (rating is null or rating >= 0 and rating <= 3),
+  text text,
+  created_at timestamptz not null default now(),
+  payment_status text,
+  wallet text,
+  source text not null default 'app',
+  btcmap_comment_id bigint unique
+);
+
+alter table if exists public.location_reviews
+  add column if not exists source text not null default 'app',
+  add column if not exists btcmap_comment_id bigint unique,
+  alter column created_at set default now();
+
+create index if not exists idx_location_reviews_location_id_created_at
+  on public.location_reviews (location_id, created_at desc);
+
+-- 10) User-submitted location reports
 
 create table if not exists public.location_reports (
   id bigint generated always as identity primary key,
