@@ -35,9 +35,18 @@ type LocationRow = {
   lat: number;
   lon: number;
   category: string;
+  addr_city?: string | null;
+  addr_postcode?: string | null;
+  addr_street?: string | null;
+  addr_housenumber?: string | null;
+  full_address?: string | null;
+  phone?: string | null;
   website: string | null;
   image_url: string | null;
   opening_hours: string | null;
+  bitcoin?: boolean | null;
+  lightning?: boolean | null;
+  raw_json?: unknown;
   is_approved: boolean;
   created_at: string;
 };
@@ -81,7 +90,7 @@ type AdminLocationReportRow = LocationReportRow & {
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
 const LOCATION_PHOTO_BUCKET = process.env.LOCATION_PHOTO_BUCKET ?? "location-photos";
 const MAX_UPLOAD_BYTES = 1024 * 1024;
-const LOCATION_SELECT = "id, created_by_user_id, btcmap_id, osm_type, osm_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at";
+const LOCATION_SELECT = "id, created_by_user_id, btcmap_id, osm_type, osm_id, name, description, lat, lon, category, addr_city, addr_postcode, addr_street, addr_housenumber, full_address, phone, website, image_url, opening_hours, bitcoin, lightning, raw_json, is_approved, created_at";
 
 type ErrorWithDetails = {
   message?: unknown;
@@ -113,6 +122,47 @@ function toErrorPayload(error: unknown) {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getRawTags(rawJson: unknown): Record<string, unknown> {
+  return asRecord(asRecord(rawJson)?.tags) ?? {};
+}
+
+function tagIsYes(value: unknown): boolean | null {
+  const normalized = asNonEmptyString(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (["yes", "true", "1", "bitcoin", "lightning"].includes(normalized)) return true;
+  if (["no", "false", "0"].includes(normalized)) return false;
+  return null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = asNonEmptyString(value);
+    if (text) return text;
+  }
+  return null;
+}
+
+function formatAddress(row: LocationRow, tags: Record<string, unknown>): string | null {
+  const explicit = asNonEmptyString(row.full_address);
+  if (explicit) return explicit;
+
+  const houseNumber = firstString(row.addr_housenumber, tags["addr:housenumber"]);
+  const street = firstString(row.addr_street, tags["addr:street"]);
+  const postcode = firstString(row.addr_postcode, tags["addr:postcode"]);
+  const city = firstString(row.addr_city, tags["addr:city"]);
+  const line1 = [houseNumber, street].filter(Boolean).join(" ");
+  const line2 = [postcode, city].filter(Boolean).join(" ");
+  return [line1, line2].filter(Boolean).join(", ") || null;
+}
+
 function mapUser(row: UserRow): UserProfile {
   const normalizedRole = typeof row.role === "string" ? row.role.trim().toLowerCase() : "user";
   return {
@@ -126,6 +176,9 @@ function mapUser(row: UserRow): UserProfile {
 }
 
 function mapLocation(row: LocationRow): Location {
+  const tags = getRawTags(row.raw_json);
+  const bitcoinFromTags = tagIsYes(tags["currency:XBT"]) ?? tagIsYes(tags["payment:onchain"]);
+  const lightningFromTags = tagIsYes(tags["payment:lightning"]) ?? tagIsYes(tags["payment:lightning_contactless"]);
   return {
     id: row.id,
     user_id: row.created_by_user_id,
@@ -134,9 +187,13 @@ function mapLocation(row: LocationRow): Location {
     latitude: row.lat,
     longitude: row.lon,
     category: row.category as Location["category"],
-    website_url: row.website,
+    website_url: firstString(row.website, tags.website),
+    phone: firstString(row.phone, tags.phone, tags["contact:phone"]),
+    address: formatAddress(row, tags),
     image_url: row.image_url,
-    schedules: row.opening_hours,
+    schedules: firstString(row.opening_hours, tags.opening_hours),
+    accepts_bitcoin: row.bitcoin ?? bitcoinFromTags,
+    accepts_lightning: row.lightning ?? lightningFromTags,
     is_approved: row.is_approved,
     created_at: row.created_at,
   };
@@ -499,9 +556,7 @@ export class SupabaseDbService implements DbService {
           bitcoin: true,
         },
       ])
-      .select(
-        "id, created_by_user_id, name, description, lat, lon, category, website, image_url, opening_hours, is_approved, created_at"
-      )
+      .select(LOCATION_SELECT)
       .single<LocationRow>();
 
     if (error) {

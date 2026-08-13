@@ -23,8 +23,12 @@ export type Location = {
   longitude: number;
   category: LocationCategory;
   website_url: string | null;
+  phone: string | null;
+  address: string | null;
   image_url: string | null;
   schedules: string | null;
+  accepts_bitcoin: boolean | null;
+  accepts_lightning: boolean | null;
   is_approved: boolean;
   created_at: string;
 };
