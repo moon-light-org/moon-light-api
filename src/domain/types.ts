@@ -5,6 +5,15 @@ export const locationReportReasons = ["missing", "no_lightning_or_btc", "illegal
 
 export type LocationCategory = (typeof allowedLocationCategories)[number];
 
+export enum LocationMainCategory {
+  Accommodation = "accommodation",
+  Bitcoin = "bitcoin",
+  FoodDrink = "food_drink",
+  Other = "other",
+  Retail = "retail",
+  Services = "services",
+}
+
 export type UserProfile = {
   id: number;
   telegram_id: string;
@@ -22,6 +31,7 @@ export type Location = {
   latitude: number;
   longitude: number;
   category: LocationCategory;
+  main_category: LocationMainCategory | null;
   website_url: string | null;
   phone: string | null;
   address: string | null;
@@ -48,6 +58,7 @@ export type CreateLocationInput = {
   latitude: number;
   longitude: number;
   category: LocationCategory;
+  mainCategory: LocationMainCategory;
   websiteUrl: string | null;
   imageUrl: string | null;
   schedules: string | null;

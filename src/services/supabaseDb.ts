@@ -35,6 +35,7 @@ type LocationRow = {
   lat: number;
   lon: number;
   category: string;
+  main_category: Location["main_category"];
   addr_city?: string | null;
   addr_postcode?: string | null;
   addr_street?: string | null;
@@ -90,7 +91,7 @@ type AdminLocationReportRow = LocationReportRow & {
 const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
 const LOCATION_PHOTO_BUCKET = process.env.LOCATION_PHOTO_BUCKET ?? "location-photos";
 const MAX_UPLOAD_BYTES = 1024 * 1024;
-const LOCATION_SELECT = "id, created_by_user_id, btcmap_id, osm_type, osm_id, name, description, lat, lon, category, addr_city, addr_postcode, addr_street, addr_housenumber, full_address, phone, website, image_url, opening_hours, bitcoin, lightning, raw_json, is_approved, created_at";
+const LOCATION_SELECT = "id, created_by_user_id, btcmap_id, osm_type, osm_id, name, description, lat, lon, category, main_category, addr_city, addr_postcode, addr_street, addr_housenumber, full_address, phone, website, image_url, opening_hours, bitcoin, lightning, raw_json, is_approved, created_at";
 
 type ErrorWithDetails = {
   message?: unknown;
@@ -187,6 +188,7 @@ function mapLocation(row: LocationRow): Location {
     latitude: row.lat,
     longitude: row.lon,
     category: row.category as Location["category"],
+    main_category: row.main_category,
     website_url: firstString(row.website, tags.website),
     phone: firstString(row.phone, tags.phone, tags["contact:phone"]),
     address: formatAddress(row, tags),
@@ -549,6 +551,7 @@ export class SupabaseDbService implements DbService {
           lat: input.latitude,
           lon: input.longitude,
           category: input.category,
+          main_category: input.mainCategory,
           website: input.websiteUrl,
           image_url: input.imageUrl,
           opening_hours: input.schedules,
@@ -658,10 +661,7 @@ export class SupabaseDbService implements DbService {
 
   async addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview> {
     const user = await getRequiredUserByTelegramId(input.telegramId);
-    const text = input.text?.trim();
-    if (!text) {
-      throw new Error("Comment text is required");
-    }
+    const text = input.text?.trim() || null;
     const { data, error } = await supabase
       .from("location_reviews")
       .insert([

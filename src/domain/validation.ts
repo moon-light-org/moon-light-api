@@ -5,6 +5,7 @@ import {
   locationWallets,
   type CreateLocationInput,
   type LocationCategory,
+  LocationMainCategory,
 } from "./types.js";
 
 export type CreateUserBodyInput = {
@@ -59,6 +60,16 @@ function ensureCategory(value: unknown): LocationCategory {
   return category as LocationCategory;
 }
 
+function ensureMainCategory(value: unknown): LocationMainCategory {
+  const mainCategory = asTrimmedString(value);
+  if (!(Object.values(LocationMainCategory) as string[]).includes(mainCategory)) {
+    throw new Error(
+      `Invalid mainCategory: expected one of ${Object.values(LocationMainCategory).join(", ")}`
+    );
+  }
+  return mainCategory as LocationMainCategory;
+}
+
 function ensureLocationName(value: unknown): string {
   const name = asTrimmedString(value);
   if (!name.length) {
@@ -100,6 +111,7 @@ export function parseCreateLocationInput(raw: unknown): CreateLocationBodyInput 
     latitude: ensureLatitude(source.latitude),
     longitude: ensureLongitude(source.longitude),
     category: ensureCategory(source.category),
+    mainCategory: ensureMainCategory(source.mainCategory),
     websiteUrl: optionalTrimmedString(source.websiteUrl),
     imageUrl: optionalTrimmedString(source.imageUrl),
     schedules: optionalTrimmedString(source.schedules),
@@ -140,9 +152,6 @@ export function parseCreateLocationReviewInput(raw: unknown): CreateLocationRevi
     throw new Error("rating must be an integer from 0 to 3");
   }
   const text = optionalTrimmedString(source.text);
-  if (!text) {
-    throw new Error("Comment text is required");
-  }
   if (text && text.length > 600) {
     throw new Error("text must not exceed 600 characters");
   }

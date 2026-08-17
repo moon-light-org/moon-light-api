@@ -83,7 +83,7 @@ export function createLocationsRouter(db: DbService) {
   router.get("/", async (req, res) => {
     try {
       const query = parseLocationQuery(req.query as Record<string, unknown>);
-      const locations = await db.listApprovedLocations(query);
+      const locations = await db.listAllLocations(query);
       res.json(locations);
     } catch (error) {
       logRouteError("GET /", error);
@@ -156,7 +156,7 @@ export function createLocationsRouter(db: DbService) {
     } catch (error) {
       logRouteError("POST /:locationId/reviews", error);
       const message = getErrorMessage(error, "Failed to add review");
-      const status = /Invalid location id|Comment text is required|rating must|must not exceed|object/.test(message)
+      const status = /Invalid location id|rating must|must not exceed|object/.test(message)
         ? 400
         : /User not found/i.test(message)
         ? 404

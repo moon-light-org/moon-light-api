@@ -20,7 +20,23 @@ alter table if exists public.places
   add column if not exists created_by_user_id bigint,
   add column if not exists is_approved boolean not null default false,
   add column if not exists image_url text,
-  add column if not exists imported_source text;
+  add column if not exists imported_source text,
+  add column if not exists main_category text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'places_main_category_check'
+      and conrelid = 'public.places'::regclass
+  ) then
+    alter table public.places
+      add constraint places_main_category_check
+      check (main_category in ('accommodation', 'bitcoin', 'food_drink', 'other', 'retail', 'services'));
+  end if;
+end
+$$;
 
 -- 3) FK ownership link
 alter table if exists public.places
