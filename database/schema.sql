@@ -58,6 +58,11 @@ create index if not exists idx_places_is_approved_created_at
 create index if not exists idx_places_created_by_user_id
   on public.places (created_by_user_id);
 
+-- A contributor can have one submitted location awaiting moderation at a time.
+create unique index if not exists idx_places_one_pending_location_per_user
+  on public.places (created_by_user_id)
+  where created_by_user_id is not null and is_approved = false;
+
 create index if not exists idx_places_lat_lon
   on public.places (lat, lon);
 
@@ -71,6 +76,19 @@ where is_approved = false
     or btcmap_id is not null
     or bitcoin is true
   );
+
+-- Correct legacy classifications that predate the main category field.
+update public.places
+set main_category = case category
+  when 'restaurant-bar' then 'food_drink'
+  when 'grocery' then 'retail'
+  else main_category
+end
+where category in ('restaurant-bar', 'grocery')
+  and main_category is distinct from case category
+    when 'restaurant-bar' then 'food_drink'
+    when 'grocery' then 'retail'
+  end;
 
 -- 7) User-contributed location photos
 create table if not exists public.location_photos (

@@ -32,6 +32,7 @@ export interface DbService {
   updateUserRole(userId: number, role: "admin" | "user"): Promise<UserProfile>;
   listApprovedLocations(query?: LocationQuery): Promise<Location[]>;
   listAllLocations(query?: LocationQuery): Promise<Location[]>;
+  hasPendingLocationForUser(telegramId: string): Promise<boolean>;
   createLocation(input: CreateLocationInput): Promise<Location>;
   deleteLocationById(locationId: number): Promise<void>;
   listLocationPhotos(locationId: number): Promise<LocationPhoto[]>;

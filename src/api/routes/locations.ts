@@ -106,6 +106,8 @@ export function createLocationsRouter(db: DbService) {
       const message = getErrorMessage(error, "Failed to create location");
       const status = /required|Invalid|must not exceed|object/.test(message)
         ? 400
+        : /awaiting confirmation/i.test(message)
+        ? 409
         : /User not found/i.test(message)
         ? 404
         : 500;

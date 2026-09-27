@@ -19,7 +19,8 @@ export function createUsersRouter(db: DbService) {
         res.status(404).json({ error: "User not found" });
         return;
       }
-      res.status(200).json(user);
+      const hasPendingLocation = await db.hasPendingLocationForUser(telegramUser.id);
+      res.status(200).json({ ...user, has_pending_location: hasPendingLocation });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to fetch user";
       res.status(500).json({ error: message });

@@ -88,7 +88,7 @@ type AdminLocationReportRow = LocationReportRow & {
   places: { name: string } | { name: string }[];
 };
 
-const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS !== "false";
+const AUTO_APPROVE_LOCATIONS = process.env.AUTO_APPROVE_LOCATIONS === "true";
 const LOCATION_PHOTO_BUCKET = process.env.LOCATION_PHOTO_BUCKET ?? "location-photos";
 const MAX_UPLOAD_BYTES = 1024 * 1024;
 const LOCATION_SELECT = "id, created_by_user_id, btcmap_id, osm_type, osm_id, name, description, lat, lon, category, main_category, addr_city, addr_postcode, addr_street, addr_housenumber, full_address, phone, website, image_url, opening_hours, bitcoin, lightning, raw_json, is_approved, created_at";
@@ -438,6 +438,18 @@ export class SupabaseDbService implements DbService {
   private async listLocationsByApproval(
     isApproved: boolean | null,
     query?: LocationQuery
+  async hasPendingLocationForUser(telegramId: string): Promise<boolean> {
+    const user = await getRequiredUserByTelegramId(telegramId);
+    const { count, error } = await supabase
+      .from("places")
+      .select("id", { count: "exact", head: true })
+      .eq("created_by_user_id", user.id)
+      .eq("is_approved", false);
+
+    if (error) throw error;
+    return (count ?? 0) > 0;
+  }
+
   ): Promise<Location[]> {
     if (query?.search) {
       return this.searchLocationsByApproval(isApproved, query);
@@ -542,6 +554,10 @@ export class SupabaseDbService implements DbService {
     const { data, error } = await supabase
       .from("places")
       .insert([
+    if (!AUTO_APPROVE_LOCATIONS && await this.hasPendingLocationForUser(input.telegramId)) {
+      throw new Error("You already have a location awaiting confirmation. You can add another after it is approved.");
+    }
+
         {
           osm_type: "user",
           osm_id: Date.now(),
@@ -566,6 +582,9 @@ export class SupabaseDbService implements DbService {
       throw error;
     }
 
+      if (error.code === "23505") {
+        throw new Error("You already have a location awaiting confirmation. You can add another after it is approved.");
+      }
     return mapLocation(data);
   }
 
