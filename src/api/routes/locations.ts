@@ -5,6 +5,7 @@ import {
   parseCreateLocationReviewInput,
 } from "../../domain/validation.js";
 import type { DbService, LocationQuery } from "../../services/db.js";
+import { CheckInError, parseCheckInPosition } from "../../domain/checkIn.js";
 import {
   requireTelegramAuth,
   type TelegramAuthRequest,
@@ -187,6 +188,27 @@ export function createLocationsRouter(db: DbService) {
         : /User not found/i.test(message)
         ? 404
         : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.post("/:locationId/check-ins", requireTelegramAuth, async (req, res) => {
+    try {
+      const locationId = parseLocationId(req.params.locationId);
+      const position = parseCheckInPosition(req.body);
+      const telegramReq = req as TelegramAuthRequest;
+      const checkIn = await db.createLocationCheckIn({
+        telegramId: telegramReq.telegram!.user.id,
+        locationId,
+        ...position,
+      });
+      res.status(201).json(checkIn);
+    } catch (error) {
+      logRouteError("POST /:locationId/check-ins", error);
+      const message = getErrorMessage(error, "Failed to check in");
+      const status = error instanceof CheckInError ? error.status
+        : /Invalid location id/.test(message) ? 400
+        : /User not found/i.test(message) ? 404 : 500;
       res.status(status).json({ error: message });
     }
   });

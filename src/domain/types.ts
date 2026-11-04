@@ -80,6 +80,7 @@ export type LocationReview = {
   source: "app" | "btcmap";
   location_id: number;
   user_id: number | null;
+  user_nickname: string | null;
   payment_status: (typeof locationPaymentStatuses)[number] | null;
   wallet: (typeof locationWallets)[number] | null;
   rating: number | null;

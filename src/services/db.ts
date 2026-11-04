@@ -11,6 +11,7 @@ import type {
   LocationReview,
   UserProfile,
 } from "../domain/types.js";
+import type { CheckInPosition, LocationCheckIn } from "../domain/checkIn.js";
 
 export type LocationQuery = {
   bbox?: {
@@ -40,6 +41,7 @@ export interface DbService {
   listLocationReviews(locationId: number): Promise<LocationReview[]>;
   addLocationReview(input: CreateLocationReviewInput): Promise<LocationReview>;
   addLocationReport(input: CreateLocationReportInput): Promise<LocationReport>;
+  createLocationCheckIn(input: CheckInPosition & { telegramId: string; locationId: number }): Promise<LocationCheckIn>;
   listLocationReports(): Promise<AdminLocationReport[]>;
   deleteLocationReviewById(reviewId: number): Promise<void>;
 }

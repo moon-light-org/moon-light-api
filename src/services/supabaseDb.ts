@@ -14,6 +14,7 @@ import type {
 } from "../domain/types.js";
 import type { DbService, LocationQuery } from "./db.js";
 import { createDefaultNickname } from "../domain/userDefaults.js";
+import { CheckInError, checkInEligibility, type CheckInPosition, type LocationCheckIn } from "../domain/checkIn.js";
 
 type UserRow = {
   id: number;
@@ -73,6 +74,7 @@ type LocationReviewRow = {
   rating: number | null;
   text: string | null;
   created_at: string;
+  users?: { nickname: string | null } | { nickname: string | null }[] | null;
 };
 
 type LocationReportRow = {
@@ -215,11 +217,13 @@ function mapLocationPhoto(row: LocationPhotoRow): LocationPhoto {
 }
 
 function mapLocationReview(row: LocationReviewRow): LocationReview {
+  const reviewer = Array.isArray(row.users) ? row.users[0] : row.users;
   return {
     id: row.id,
     source: row.source ?? "app",
     location_id: row.location_id,
     user_id: row.user_id,
+    user_nickname: reviewer?.nickname ?? null,
     payment_status: row.payment_status,
     wallet: row.wallet,
     rating: row.rating,
@@ -435,9 +439,6 @@ export class SupabaseDbService implements DbService {
     return this.listLocationsByApproval(null, query);
   }
 
-  private async listLocationsByApproval(
-    isApproved: boolean | null,
-    query?: LocationQuery
   async hasPendingLocationForUser(telegramId: string): Promise<boolean> {
     const user = await getRequiredUserByTelegramId(telegramId);
     const { count, error } = await supabase
@@ -450,6 +451,9 @@ export class SupabaseDbService implements DbService {
     return (count ?? 0) > 0;
   }
 
+  private async listLocationsByApproval(
+    isApproved: boolean | null,
+    query?: LocationQuery
   ): Promise<Location[]> {
     if (query?.search) {
       return this.searchLocationsByApproval(isApproved, query);
@@ -551,13 +555,13 @@ export class SupabaseDbService implements DbService {
   async createLocation(input: CreateLocationInput): Promise<Location> {
     const user = await getRequiredUserByTelegramId(input.telegramId);
 
-    const { data, error } = await supabase
-      .from("places")
-      .insert([
     if (!AUTO_APPROVE_LOCATIONS && await this.hasPendingLocationForUser(input.telegramId)) {
       throw new Error("You already have a location awaiting confirmation. You can add another after it is approved.");
     }
 
+    const { data, error } = await supabase
+      .from("places")
+      .insert([
         {
           osm_type: "user",
           osm_id: Date.now(),
@@ -579,12 +583,12 @@ export class SupabaseDbService implements DbService {
       .single<LocationRow>();
 
     if (error) {
-      throw error;
-    }
-
       if (error.code === "23505") {
         throw new Error("You already have a location awaiting confirmation. You can add another after it is approved.");
       }
+      throw error;
+    }
+
     return mapLocation(data);
   }
 
@@ -669,7 +673,7 @@ export class SupabaseDbService implements DbService {
   async listLocationReviews(locationId: number): Promise<LocationReview[]> {
     const { data, error } = await supabase
       .from("location_reviews")
-      .select("id, source, location_id, user_id, payment_status, wallet, rating, text, created_at")
+      .select("id, source, location_id, user_id, payment_status, wallet, rating, text, created_at, users(nickname)")
       .eq("location_id", locationId)
       .order("created_at", { ascending: false });
     if (error) {
@@ -699,7 +703,46 @@ export class SupabaseDbService implements DbService {
     if (error) {
       throw error;
     }
-    return mapLocationReview(data);
+    return { ...mapLocationReview(data), user_nickname: user.nickname };
+  }
+
+  async createLocationCheckIn(input: CheckInPosition & { telegramId: string; locationId: number }): Promise<LocationCheckIn> {
+    const user = await getRequiredUserByTelegramId(input.telegramId);
+    const { data: place, error: placeError } = await supabase
+      .from("places")
+      .select("id, lat, lon, is_approved")
+      .eq("id", input.locationId)
+      .maybeSingle();
+    if (placeError) throw placeError;
+    if (!place?.is_approved) throw new CheckInError("Place not found.", 404);
+    const latitude = Number(place.lat);
+    const longitude = Number(place.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new CheckInError("This place has no valid map position.", 422);
+    }
+
+    const eligibility = checkInEligibility(input, { latitude, longitude });
+    if (eligibility === "out_of_range") {
+      throw new CheckInError("You need to be within 100 m of this place to check in.", 422);
+    }
+    if (eligibility === "uncertain") {
+      throw new CheckInError("Location accuracy is too low to confirm you are within 100 m. Try again.", 422);
+    }
+
+    const { data, error } = await supabase.rpc("create_location_checkin", {
+      p_user_id: user.id,
+      p_location_id: place.id,
+    });
+    if (error) throw error;
+    if (!data || typeof data !== "object") throw new Error("Invalid check-in response from database");
+    if (data.status === "cooldown") {
+      throw new CheckInError(`You can check in to this place again after ${new Date(data.nextEligibleAt).toLocaleString()}.`, 409);
+    }
+    if (data.status !== "ok" || typeof data.id !== "number" ||
+        typeof data.checkedInAt !== "string" || typeof data.nextEligibleAt !== "string") {
+      throw new Error("Invalid check-in response from database");
+    }
+    return { id: data.id, checkedInAt: data.checkedInAt, nextEligibleAt: data.nextEligibleAt };
   }
 
   async addLocationReport(input: CreateLocationReportInput): Promise<LocationReport> {
